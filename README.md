@@ -88,3 +88,13 @@ fi
 verify_aide_db
 
 echo "AIDE operation completed successfully."
+
+
+# Function to check if AIDE_NEW_DB already exists
+check_aide_new_db() {
+    if [[ -f "$AIDE_NEW_DB" ]]; then
+        echo "Error: AIDE new database file ($AIDE_NEW_DB) already exists."
+        echo "Please remove or rename it before initializing a new database."
+        exit 1
+    fi
+}
