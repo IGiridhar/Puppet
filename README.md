@@ -1,25 +1,51 @@
-# Allow loopback traffic
-iptables -A INPUT -i lo -j ACCEPT
-iptables -A OUTPUT -o lo -j ACCEPT
+#!/bin/bash
 
-# Allow established/related connections
-iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+# Define variables
+AIDE_BIN="/usr/sbin/aide"
+AIDE_CONF="/etc/aide.conf"
+AIDE_DB="/var/lib/aide/aide.db.gz"
+AIDE_NEW_DB="/var/lib/aide/aide.db.new.gz"
 
-# Allow ICMP traffic
-iptables -A INPUT -p icmp -j ACCEPT
-iptables -A OUTPUT -p icmp -j ACCEPT
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
 
-# Allow specific services
-iptables -A INPUT -p tcp --dport 22 -j ACCEPT  # SSH
-iptables -A INPUT -p tcp --dport 80 -j ACCEPT  # HTTP
-iptables -A INPUT -p tcp --dport 443 -j ACCEPT # HTTPS
+# Ensure the script is run as root
+if [[ $EUID -ne 0 ]]; then
+    echo "Error: This script must be run as root or with sudo."
+    exit 1
+fi
 
-# Allow traffic from trusted subnets
-iptables -A INPUT -s 192.168.1.0/24 -j ACCEPT
+echo "Starting AIDE database initialization..."
 
-# Log and drop all other packets
-iptables -A INPUT -j LOG --log-prefix "Dropped Packet: " --log-level 4
-iptables -P INPUT DROP
-iptables -P FORWARD DROP
-iptables -P OUTPUT ACCEPT
+# Install AIDE if not installed
+if ! command_exists aide; then
+    echo "AIDE is not installed. Installing now..."
+    yum install -y aide
+    if [[ $? -ne 0 ]]; then
+        echo "Error: Failed to install AIDE."
+        exit 1
+    fi
+fi
+
+# Initialize AIDE database
+echo "Initializing AIDE database..."
+$AIDE_BIN --init
+
+# Check if the new database was created
+if [[ -f "$AIDE_NEW_DB" ]]; then
+    echo "AIDE database initialized successfully."
+    echo "Replacing the current database with the new one..."
+    mv -f "$AIDE_NEW_DB" "$AIDE_DB"
+    echo "Database initialization complete!"
+else
+    echo "Error: AIDE database initialization failed."
+    exit 1
+fi
+
+# Verify the database
+echo "Verifying AIDE setup..."
+$AIDE_BIN --check
+
+echo "AIDE initialization process completed successfully."
